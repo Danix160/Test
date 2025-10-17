@@ -1,8 +1,9 @@
 package com.toonitalia
 
-
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import org.jsoup.nodes.Document
+import android.util.Log // Aggiunto per la funzione bypassUprot
 
 class ToonitaliaPlugin : MainAPI() {
     override var mainUrl = "https://toonitalia.xyz"
@@ -49,6 +50,39 @@ class ToonitaliaPlugin : MainAPI() {
         }
     }
 
+    // NUOVA FUNZIONE PER ESTRARRE EPISODI CON INFORMAZIONI SU STAGIONI E NUMERI
+    private fun getEpisodes(page: Document): List<Episode> {
+        // Usa `selectFirst` con '!!' solo se sei sicuro che l'elemento esista, altrimenti usa '?' e gestisci il null.
+        val table = page.selectFirst("#hostlinks > table:nth-child(1)")!!
+        var season: Int? = 1
+        val rows = table.select("tr")
+
+        val episodes: List<Episode> = rows.mapNotNull {
+            if (it.childrenSize() == 0) {
+                null
+            } else if (it.childrenSize() == 1) {
+                val seasonText =
+                    it.select("td:nth-child(1)").text().substringBefore("- Episodi disponibi")
+                season = Regex("""\d+""").find(seasonText)?.value?.toInt()
+                null
+            } else {
+                val title = it.select("td:nth-child(1)").text()
+                // Mappiamo i link come una stringa JSON
+                val links = it.select("a").map { a -> a.attr("href") }
+                val dataString = links.joinToString(prefix = "[", separator = ", ", postfix = "]") { link -> "\"$link\"" }
+                
+                // Correggo l'uso del costruttore e imposto i campi usando newEpisode con una lambda
+                newEpisode(title) {
+                    this.data = dataString // data ora contiene la lista di URL come stringa JSON
+                    this.season = season
+                    // Estrae il numero dell'episodio. Assumiamo che il formato sia '...x[Numero] ...'
+                    this.episode = title.substringAfter("x").substringBefore(" ").toIntOrNull() 
+                }
+            }
+        }
+        return episodes
+    }
+
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
         val title = document.selectFirst("h1")?.text() ?: return null
@@ -56,26 +90,12 @@ class ToonitaliaPlugin : MainAPI() {
         val imgEl = document.selectFirst(".post img")
         val poster = imgEl?.attr("src")?.takeIf { it.isNotBlank() } ?: imgEl?.attr("data-src")
 
-        val episodes = document.select(".entry-content a[href]").mapNotNull {
-            val name = it.text().trim()
-            val link = it.attr("href")
-            
-            if (name.isNotBlank() && !name.contains("download", true)) {
-                // CORREZIONE 1: L'errore suggerisce che newEpisode(String, String) non esiste.
-                // Usiamo newEpisode() e lo configuriamo, o usiamo un costruttore funzionante
-                // Riprovo con newEpisode() e lambda
-                newEpisode(name) {
-                    this.data = link
-                }
-            } else {
-                null
-            }
-        }
+        // Usa la funzione getEpisodes
+        val episodes = getEpisodes(document)
 
         return newAnimeLoadResponse(title, url, TvType.Anime) {
             this.posterUrl = poster
-            // CORREZIONE 2: Risoluzione di DubStatus.SUB e inferenza del tipo esplicita
-            // Ho anche corretto 'SUB' in 'Sub' (case sensitve)
+            // Risoluzione di DubStatus.Sub e inferenza del tipo esplicita
             this.episodes = mapOf<DubStatus, List<Episode>>(DubStatus.Sub to episodes)
         }
     }
@@ -86,16 +106,48 @@ class ToonitaliaPlugin : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data).document
-        val iframes = document.select("iframe")
+        // La variabile 'data' qui contiene la stringa JSON dei link creata in getEpisodes.
+        // Decodifichiamo la stringa JSON in una lista di URL.
+        val linkList = data.substring(1, data.length - 1).split(", ").map { it.trim().removeSurrounding("\"") }
 
-        iframes.forEach {
-            val src = it.attr("src")
+        linkList.forEach { src ->
             if (src.isNotBlank()) {
-                loadExtractor(src, data, subtitleCallback, callback)
+                if (src.contains("uprot")) {
+                    // Bypass di Uprot se il link lo contiene
+                    val bypassedUrl = bypassUprot(src)
+                    if (bypassedUrl != null) {
+                        // Passa l'URL bypassato all'estrattore. mainUrl è usato come referer.
+                        loadExtractor(bypassedUrl, mainUrl, subtitleCallback, callback)
+                    }
+                } else {
+                    // Tratta link diretti o altri link non-uprot
+                    loadExtractor(src, mainUrl, subtitleCallback, callback)
+                }
             }
         }
 
-        return iframes.isNotEmpty()
+        return linkList.isNotEmpty()
+    }
+
+    // FUNZIONE DI BYPASS COPIATA DA OnlineSerieTV
+    private suspend fun bypassUprot(link: String): String? {
+        // Sostituisce msf con mse se presente, come fatto nel codice originale
+        val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
+
+        // Genera headers
+        val headers = mapOf(
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        )
+
+        // Esegue la richiesta HTTP
+        val response = app.get(updatedLink, headers = headers, timeout = 10_000)
+
+        // Parse l'HTML per trovare il link finale. Uprot spesso reindirizza o nasconde il link
+        val document = response.document
+        // Logging disabilitato per default per pulizia, ma puoi riattivarlo per debug
+        // Log.d("Uprot", document.toString()) 
+        val maxstreamUrl = document.selectFirst("a")?.attr("href")
+
+        return maxstreamUrl
     }
 }
