@@ -1,0 +1,11 @@
+{
+  "name": "Toonitalia",
+  "description": "Plugin per lo streaming di anime italiani da Toonitalia.xyz",
+  "author": "Danix",
+  "version": 1,
+  "plugin_class": "com.toonitalia.ToonitaliaPlugin",
+  "target_api": 3,
+  "languages": ["it"],
+  "tv_types": ["Anime", "TvSeries", "Movie"],
+  "icon_url": "https://toonitalia.xyz/wp-content/uploads/2023/01/logo.png"
+}
