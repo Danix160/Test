@@ -60,8 +60,12 @@ class ToonitaliaPlugin : MainAPI() {
             val link = it.attr("href")
             
             if (name.isNotBlank() && !name.contains("download", true)) {
-                // CORREZIONE 1: Uso corretto di newEpisode, che accetta un'URL e il nome
-                newEpisode(link, name)
+                // CORREZIONE 1: L'errore suggerisce che newEpisode(String, String) non esiste.
+                // Usiamo newEpisode() e lo configuriamo, o usiamo un costruttore funzionante
+                // Riprovo con newEpisode() e lambda
+                newEpisode(name) {
+                    this.data = link
+                }
             } else {
                 null
             }
@@ -69,8 +73,9 @@ class ToonitaliaPlugin : MainAPI() {
 
         return newAnimeLoadResponse(title, url, TvType.Anime) {
             this.posterUrl = poster
-            // CORREZIONE 2: Uso esplicito del tipo Pair con DubStatus.SUB e episodes
-            this.episodes = mapOf(Pair(DubStatus.SUB, episodes))
+            // CORREZIONE 2: Risoluzione di DubStatus.SUB e inferenza del tipo esplicita
+            // Ho anche corretto 'SUB' in 'Sub' (case sensitve)
+            this.episodes = mapOf<DubStatus, List<Episode>>(DubStatus.Sub to episodes)
         }
     }
 
