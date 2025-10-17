@@ -83,40 +83,21 @@ class ToonitaliaPlugin : MainAPI() {
         return episodes
     }
 
-    override suspend fun load(url: String): LoadResponse {
-        val response = app.get(url).document
-        val dati = response.selectFirst(".headingder")!!
-        val poster = dati.select(".imgs > img").attr("src").replace(Regex("""-\d+x\d+"""), "")
-        val title = dati.select(".dataplus > div:nth-child(1) > h1").text().trim()
-            .replace(Regex("""\d{4}$"""), "")
-        val rating = dati.select(".stars > span:nth-child(3)").text().trim().removeSuffix("/10")
-        val genres = dati.select(".stars > span:nth-child(6) > i:nth-child(1)").text().trim()
-        val year = dati.select(".stars > span:nth-child(8) > i:nth-child(1)").text().trim()
-        val duration = dati.select(".stars > span:nth-child(10) > i:nth-child(1)").text()
-            .removeSuffix(" minuti")
-        val isMovie = url.contains("/film/")
+    override suspend fun load(url: String): LoadResponse? {
+        val document = app.get(url).document
+        val title = document.selectFirst("h1")?.text() ?: return null
 
-        return if (isMovie) {
-            val streamUrl = response.select("#hostlinks").select("a").map { it.attr("href") }
-            val plot = response.select(".post > p:nth-child(16)").text().trim()
-            newMovieLoadResponse(title, url, TvType.Movie, streamUrl) {
-                addPoster(poster)
-                addRating(rating)
-                this.duration = duration.toIntOrNull()
-                this.year = year.toIntOrNull()
-                this.tags = genres.split(",")
-                this.plot = plot
-            }
-        } else {
-            val episodes = getEpisodes(response)
-            val plot = response.select(".post > p:nth-child(17)").text().trim()
-            newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
-                addPoster(poster)
-                addRating(rating)
-                this.year = year.toIntOrNull()
-                this.tags = genres.split(",")
-                this.plot = plot
-            }
+        val imgEl = document.selectFirst(".post img")
+        val poster = imgEl?.attr("src")?.takeIf { it.isNotBlank() } ?: imgEl?.attr("data-src")
+
+        // Usa la funzione getEpisodes
+        val episodes = getEpisodes(document)
+
+        return newAnimeLoadResponse(title, url, TvType.Anime) {
+            this.posterUrl = poster
+            // L'assegnazione del rating non è supportata direttamente da LoadResponse in questa versione,
+            // e non viene estratto il valore dal sito. Manteniamo pulito.
+            this.episodes = mapOf(DubStatus.Sub to episodes)
         }
     }
 
