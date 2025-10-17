@@ -58,16 +58,19 @@ class ToonitaliaPlugin : MainAPI() {
         val episodes = document.select(".entry-content a[href]").mapNotNull {
             val name = it.text().trim()
             val link = it.attr("href")
-            // Riga 61 Corretta: Usato newEpisode invece del costruttore deprecato
-            if (name.isNotBlank() && !name.contains("download", true)) newEpisode(link, name)
-            else null
+            
+            if (name.isNotBlank() && !name.contains("download", true)) {
+                // CORREZIONE 1: Uso corretto di newEpisode, che accetta un'URL e il nome
+                newEpisode(link, name)
+            } else {
+                null
+            }
         }
 
         return newAnimeLoadResponse(title, url, TvType.Anime) {
             this.posterUrl = poster
-            // Riga 67 Corretta: Convertito List<Episode> in MutableMap<DubStatus, List<Episode>>
-            // Assumiamo che gli episodi siano SUB (sottotitolati) per default.
-            this.episodes = mapOf(DubStatus.SUB to episodes)
+            // CORREZIONE 2: Uso esplicito del tipo Pair con DubStatus.SUB e episodes
+            this.episodes = mapOf(Pair(DubStatus.SUB, episodes))
         }
     }
 
