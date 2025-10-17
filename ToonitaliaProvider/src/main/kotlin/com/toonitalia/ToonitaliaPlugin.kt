@@ -95,8 +95,8 @@ class ToonitaliaPlugin : MainAPI() {
 
         return newAnimeLoadResponse(title, url, TvType.Anime) {
             this.posterUrl = poster
-            // Risoluzione di DubStatus.Sub e inferenza del tipo esplicita
-            this.episodes = mapOf<DubStatus, List<Episode>>(DubStatus.Sub to episodes)
+            // RISOLUZIONE DELL'ERRORE: Sintassi corretta per mapOf
+            this.episodes = mapOf(DubStatus.Sub to episodes)
         }
     }
 
